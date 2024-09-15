@@ -38,60 +38,58 @@ func parseArgs() (string, bool, bool) {
 
 func crtsh(domain string) {
 	client := http.Client{
-		Timeout: 25 * time.Second,
-	}
-	resp, err := client.Get(fmt.Sprintf(BASE_URL, domain))
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Non-OK HTTP status:", resp.StatusCode)
-		return
+		Timeout: 60 * time.Second, // Tingkatkan timeout menjadi 60 detik
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return
-	}
-
-	if len(body) == 0 {
-		fmt.Println("No data found for domain:", domain)
-		return
-	}
-
-	// Debugging: Print the raw body to see the response
-	// fmt.Println(string(body))
-
-	var jsonData []map[string]interface{}
-	err = json.Unmarshal(body, &jsonData)
-	if err != nil {
-		fmt.Println("Error parsing JSON:", err)
-		fmt.Println(string(body)) // Debugging: Print the body in case of JSON error
-		return
-	}
-
-	for _, entry := range jsonData {
-		nameValue, ok := entry["name_value"].(string)
-		if !ok {
-			fmt.Println("Error: name_value field missing or not a string")
+	retries := 3 // Retry up to 3 times
+	for retries > 0 {
+		resp, err := client.Get(fmt.Sprintf(BASE_URL, domain))
+		if err != nil {
+			fmt.Println("Error making request:", err)
+			retries-- // Kurangi jumlah retry
+			time.Sleep(2 * time.Second) // Tunggu 2 detik sebelum mencoba ulang
 			continue
 		}
-		subnames := strings.Split(nameValue, "\n")
-		for _, subname := range subnames {
-			if strings.Contains(subname, "*") {
-				if !wildcardsubdomains[subname] {
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			fmt.Println("Non-OK HTTP status:", resp.StatusCode)
+			return
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading response body:", err)
+			return
+		}
+
+		if len(body) == 0 {
+			fmt.Println("No data found for domain:", domain)
+			return
+		}
+
+		var jsonData []map[string]interface{}
+		err = json.Unmarshal(body, &jsonData)
+		if err != nil {
+			fmt.Println("Error parsing JSON:", err)
+			return
+		}
+
+		for _, entry := range jsonData {
+			nameValue, ok := entry["name_value"].(string)
+			if !ok {
+				continue
+			}
+			subnames := strings.Split(nameValue, "\n")
+			for _, subname := range subnames {
+				if strings.Contains(subname, "*") {
 					wildcardsubdomains[subname] = true
-				}
-			} else {
-				if !subdomains[subname] {
+				} else {
 					subdomains[subname] = true
 				}
 			}
 		}
+		break // Keluar dari loop jika berhasil
 	}
 }
 
