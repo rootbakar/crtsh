@@ -42,23 +42,44 @@ func crtsh(domain string) {
 	}
 	resp, err := client.Get(fmt.Sprintf(BASE_URL, domain))
 	if err != nil {
+		fmt.Println("Error making request:", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Non-OK HTTP status:", resp.StatusCode)
 		return
 	}
 
-	var jsonData []map[string]string
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return
+	}
+
+	if len(body) == 0 {
+		fmt.Println("No data found for domain:", domain)
+		return
+	}
+
+	// Debugging: Print the raw body to see the response
+	// fmt.Println(string(body))
+
+	var jsonData []map[string]interface{}
 	err = json.Unmarshal(body, &jsonData)
 	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		fmt.Println(string(body)) // Debugging: Print the body in case of JSON error
 		return
 	}
 
 	for _, entry := range jsonData {
-		nameValue := entry["name_value"]
+		nameValue, ok := entry["name_value"].(string)
+		if !ok {
+			fmt.Println("Error: name_value field missing or not a string")
+			continue
+		}
 		subnames := strings.Split(nameValue, "\n")
 		for _, subname := range subnames {
 			if strings.Contains(subname, "*") {
@@ -78,6 +99,11 @@ func main() {
 	domain, recursive, wildcard := parseArgs()
 
 	crtsh(domain)
+
+	if len(subdomains) == 0 && len(wildcardsubdomains) == 0 {
+		fmt.Println("No subdomains found for domain:", domain)
+		return
+	}
 
 	for subdomain := range subdomains {
 		fmt.Println(subdomain)
